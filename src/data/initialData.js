@@ -131,33 +131,6 @@ export const DEFAULT_SCORING_CRITERIA = [
   }
 ]
 
-
-  {
-    id: '2',
-    name: 'Emily Davis',
-    email: 'emily.davis@innovate.io',
-    phone: '+1 (555) 987-6543',
-    company: 'Innovate Digital',
-    status: 'Lead',
-    leadSource: 'Referral',
-    assignedTo: 'Mike Wilson',
-    createdAt: new Date('2024-01-18'),
-    updatedAt: new Date('2024-01-22')
-  },
-  {
-    id: '3',
-    name: 'David Rodriguez',
-    email: 'david.r@startupxyz.com',
-    phone: '+1 (555) 456-7890',
-    company: 'StartupXYZ',
-    status: 'Prospect',
-    leadSource: 'LinkedIn',
-    assignedTo: 'Sarah Johnson',
-    createdAt: new Date('2024-01-20'),
-    updatedAt: new Date('2024-01-24')
-  }
-]
-
 export const INITIAL_DEALS = [
   {
     id: '1',
