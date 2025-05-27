@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'react-toastify'
 import ApperIcon from './ApperIcon'
+import Chart from 'react-apexcharts'
+
 import { format } from 'date-fns'
 
 const INITIAL_CUSTOMERS = [
@@ -100,6 +102,14 @@ export default function MainFeature() {
   const [editingDeal, setEditingDeal] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [draggedDeal, setDraggedDeal] = useState(null)
+  const [dateRange, setDateRange] = useState('7d')
+  const [dashboardWidgets, setDashboardWidgets] = useState({
+    revenue: true,
+    deals: true,
+    conversion: true,
+    performance: true
+  })
+
 
   const [customerForm, setCustomerForm] = useState({
     name: '',
@@ -302,6 +312,72 @@ export default function MainFeature() {
     return deals.reduce((total, deal) => total + deal.value, 0)
   }
 
+  const getRevenueData = () => {
+    const today = new Date()
+    const data = []
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date(today)
+      date.setMonth(date.getMonth() - i)
+      const closedDeals = deals.filter(deal => 
+        deal.stage === 'Closed' || deal.stage === 'closed'
+      )
+      const monthlyRevenue = Math.floor(Math.random() * 50000) + 20000
+      data.push({
+        month: date.toLocaleDateString('en-US', { month: 'short' }),
+        value: monthlyRevenue
+      })
+    }
+    return data
+  }
+
+  const getConversionRate = () => {
+    const totalDeals = deals.length
+    const closedDeals = deals.filter(deal => 
+      deal.stage === 'Closed' || deal.stage === 'closed'
+    ).length
+    return totalDeals > 0 ? Math.round((closedDeals / totalDeals) * 100) : 0
+  }
+
+  const getAverageDealSize = () => {
+    const totalValue = deals.reduce((sum, deal) => sum + deal.value, 0)
+    return deals.length > 0 ? Math.round(totalValue / deals.length) : 0
+  }
+
+  const getDealStageData = () => {
+    return PIPELINE_STAGES.map(stage => ({
+      name: stage.name,
+      value: getDealsByStage(stage.id).length,
+      color: stage.color.replace('bg-', '')
+    }))
+  }
+
+  const getMonthlyDealsData = () => {
+    const data = []
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date()
+      date.setMonth(date.getMonth() - i)
+      data.push({
+        month: date.toLocaleDateString('en-US', { month: 'short' }),
+        deals: Math.floor(Math.random() * 15) + 5
+      })
+    }
+    return data
+  }
+
+  const handleDateRangeChange = (range) => {
+    setDateRange(range)
+    toast.success(`Date range updated to ${range}`)
+  }
+
+  const toggleWidget = (widget) => {
+    setDashboardWidgets(prev => ({
+      ...prev,
+      [widget]: !prev[widget]
+    }))
+    toast.success(`Widget ${dashboardWidgets[widget] ? 'hidden' : 'shown'}`)
+  }
+
+
   return (
     <div className="min-h-screen">
       {/* Header */}
@@ -346,6 +422,20 @@ export default function MainFeature() {
                     <span className="hidden sm:inline">Pipeline</span>
                   </span>
                 </button>
+                <button
+                  onClick={() => setActiveTab('dashboard')}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                    activeTab === 'dashboard'
+                      ? 'bg-white dark:bg-surface-800 shadow-md text-primary'
+                      : 'text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-200'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <ApperIcon name="PieChart" className="w-4 h-4" />
+                    <span className="hidden sm:inline">Dashboard</span>
+                  </span>
+                </button>
+
               </div>
             </div>
           </div>
@@ -622,6 +712,453 @@ export default function MainFeature() {
                 </div>
               )}
             </motion.div>
+
+          {activeTab === 'dashboard' && (
+            <motion.div
+              key="dashboard"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              {/* Dashboard Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-bold text-surface-900 dark:text-surface-100">
+                    Sales Dashboard
+                  </h2>
+                  <p className="text-surface-600 dark:text-surface-400 mt-1">
+                    Interactive charts and analytics for sales performance
+                  </p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex bg-surface-100 dark:bg-surface-700 rounded-xl p-1">
+                    <button
+                      onClick={() => handleDateRangeChange('7d')}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium transition-all duration-200 ${
+                        dateRange === '7d'
+                          ? 'bg-white dark:bg-surface-800 shadow-md text-primary'
+                          : 'text-surface-600 dark:text-surface-400'
+                      }`}
+                    >
+                      7D
+                    </button>
+                    <button
+                      onClick={() => handleDateRangeChange('30d')}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium transition-all duration-200 ${
+                        dateRange === '30d'
+                          ? 'bg-white dark:bg-surface-800 shadow-md text-primary'
+                          : 'text-surface-600 dark:text-surface-400'
+                      }`}
+                    >
+                      30D
+                    </button>
+                    <button
+                      onClick={() => handleDateRangeChange('90d')}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium transition-all duration-200 ${
+                        dateRange === '90d'
+                          ? 'bg-white dark:bg-surface-800 shadow-md text-primary'
+                          : 'text-surface-600 dark:text-surface-400'
+                      }`}
+                    >
+                      90D
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* KPI Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
+                <motion.div
+                  layout
+                  className="card-gradient rounded-2xl p-6 shadow-card"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center">
+                      <ApperIcon name="DollarSign" className="w-6 h-6 text-white" />
+                    </div>
+                    <span className="text-xs text-green-600 bg-green-100 dark:bg-green-900 dark:text-green-200 px-2 py-1 rounded-full">
+                      +12.5%
+                    </span>
+                  </div>
+                  <h3 className="text-2xl font-bold text-surface-900 dark:text-surface-100 mb-1">
+                    ${getTotalPipelineValue().toLocaleString()}
+                  </h3>
+                  <p className="text-surface-600 dark:text-surface-400 text-sm">
+                    Total Pipeline Value
+                  </p>
+                </motion.div>
+
+                <motion.div
+                  layout
+                  className="card-gradient rounded-2xl p-6 shadow-card"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
+                      <ApperIcon name="Target" className="w-6 h-6 text-white" />
+                    </div>
+                    <span className="text-xs text-blue-600 bg-blue-100 dark:bg-blue-900 dark:text-blue-200 px-2 py-1 rounded-full">
+                      +8.3%
+                    </span>
+                  </div>
+                  <h3 className="text-2xl font-bold text-surface-900 dark:text-surface-100 mb-1">
+                    {deals.length}
+                  </h3>
+                  <p className="text-surface-600 dark:text-surface-400 text-sm">
+                    Active Deals
+                  </p>
+                </motion.div>
+
+                <motion.div
+                  layout
+                  className="card-gradient rounded-2xl p-6 shadow-card"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center">
+                      <ApperIcon name="TrendingUp" className="w-6 h-6 text-white" />
+                    </div>
+                    <span className="text-xs text-purple-600 bg-purple-100 dark:bg-purple-900 dark:text-purple-200 px-2 py-1 rounded-full">
+                      +5.7%
+                    </span>
+                  </div>
+                  <h3 className="text-2xl font-bold text-surface-900 dark:text-surface-100 mb-1">
+                    {getConversionRate()}%
+                  </h3>
+                  <p className="text-surface-600 dark:text-surface-400 text-sm">
+                    Conversion Rate
+                  </p>
+                </motion.div>
+
+                <motion.div
+                  layout
+                  className="card-gradient rounded-2xl p-6 shadow-card"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center">
+                      <ApperIcon name="Calculator" className="w-6 h-6 text-white" />
+                    </div>
+                    <span className="text-xs text-orange-600 bg-orange-100 dark:bg-orange-900 dark:text-orange-200 px-2 py-1 rounded-full">
+                      +15.2%
+                    </span>
+                  </div>
+                  <h3 className="text-2xl font-bold text-surface-900 dark:text-surface-100 mb-1">
+                    ${getAverageDealSize().toLocaleString()}
+                  </h3>
+                  <p className="text-surface-600 dark:text-surface-400 text-sm">
+                    Avg Deal Size
+                  </p>
+                </motion.div>
+              </div>
+
+              {/* Charts Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                {/* Revenue Chart */}
+                {dashboardWidgets.revenue && (
+                  <motion.div
+                    layout
+                    className="card-gradient rounded-2xl p-6 shadow-card"
+                  >
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="text-lg font-semibold text-surface-900 dark:text-surface-100">
+                        Revenue Trend
+                      </h3>
+                      <button
+                        onClick={() => toggleWidget('revenue')}
+                        className="p-2 text-surface-400 hover:text-surface-600 hover:bg-surface-100 dark:hover:bg-surface-700 rounded-lg transition-all"
+                      >
+                        <ApperIcon name="EyeOff" className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <Chart
+                      options={{
+                        chart: {
+                          type: 'area',
+                          toolbar: { show: false },
+                          background: 'transparent'
+                        },
+                        colors: ['#3B82F6'],
+                        dataLabels: { enabled: false },
+                        stroke: { curve: 'smooth', width: 3 },
+                        fill: {
+                          type: 'gradient',
+                          gradient: {
+                            shadeIntensity: 1,
+                            opacityFrom: 0.4,
+                            opacityTo: 0.1
+                          }
+                        },
+                        xaxis: {
+                          categories: getRevenueData().map(d => d.month),
+                          labels: { style: { colors: '#64748b' } }
+                        },
+                        yaxis: {
+                          labels: {
+                            style: { colors: '#64748b' },
+                            formatter: (val) => `$${(val / 1000).toFixed(0)}k`
+                          }
+                        },
+                        grid: { borderColor: '#e2e8f0' },
+                        tooltip: {
+                          y: {
+                            formatter: (val) => `$${val.toLocaleString()}`
+                          }
+                        }
+                      }}
+                      series={[{
+                        name: 'Revenue',
+                        data: getRevenueData().map(d => d.value)
+                      }]}
+                      type="area"
+                      height={300}
+                    />
+                  </motion.div>
+                )}
+
+                {/* Deal Stage Distribution */}
+                {dashboardWidgets.deals && (
+                  <motion.div
+                    layout
+                    className="card-gradient rounded-2xl p-6 shadow-card"
+                  >
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="text-lg font-semibold text-surface-900 dark:text-surface-100">
+                        Deal Distribution
+                      </h3>
+                      <button
+                        onClick={() => toggleWidget('deals')}
+                        className="p-2 text-surface-400 hover:text-surface-600 hover:bg-surface-100 dark:hover:bg-surface-700 rounded-lg transition-all"
+                      >
+                        <ApperIcon name="EyeOff" className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <Chart
+                      options={{
+                        chart: {
+                          type: 'donut',
+                          background: 'transparent'
+                        },
+                        colors: ['#94a3b8', '#3b82f6', '#eab308', '#f97316', '#22c55e'],
+                        labels: getDealStageData().map(d => d.name),
+                        dataLabels: {
+                          enabled: true,
+                          formatter: function (val, opts) {
+                            return opts.w.config.series[opts.seriesIndex]
+                          }
+                        },
+                        plotOptions: {
+                          pie: {
+                            donut: {
+                              size: '70%',
+                              labels: {
+                                show: true,
+                                total: {
+                                  show: true,
+                                  label: 'Total',
+                                  formatter: () => deals.length
+                                }
+                              }
+                            }
+                          }
+                        },
+                        legend: {
+                          position: 'bottom',
+                          labels: { colors: '#64748b' }
+                        },
+                        tooltip: {
+                          y: {
+                            formatter: (val) => `${val} deals`
+                          }
+                        }
+                      }}
+                      series={getDealStageData().map(d => d.value)}
+                      type="donut"
+                      height={300}
+                    />
+                  </motion.div>
+                )}
+              </div>
+
+              {/* Additional Charts Row */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Monthly Deals */}
+                {dashboardWidgets.conversion && (
+                  <motion.div
+                    layout
+                    className="card-gradient rounded-2xl p-6 shadow-card"
+                  >
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="text-lg font-semibold text-surface-900 dark:text-surface-100">
+                        Monthly Deals
+                      </h3>
+                      <button
+                        onClick={() => toggleWidget('conversion')}
+                        className="p-2 text-surface-400 hover:text-surface-600 hover:bg-surface-100 dark:hover:bg-surface-700 rounded-lg transition-all"
+                      >
+                        <ApperIcon name="EyeOff" className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <Chart
+                      options={{
+                        chart: {
+                          type: 'bar',
+                          toolbar: { show: false },
+                          background: 'transparent'
+                        },
+                        colors: ['#8B5CF6'],
+                        plotOptions: {
+                          bar: {
+                            borderRadius: 8,
+                            columnWidth: '60%'
+                          }
+                        },
+                        dataLabels: { enabled: false },
+                        xaxis: {
+                          categories: getMonthlyDealsData().map(d => d.month),
+                          labels: { style: { colors: '#64748b' } }
+                        },
+                        yaxis: {
+                          labels: { style: { colors: '#64748b' } }
+                        },
+                        grid: { borderColor: '#e2e8f0' },
+                        tooltip: {
+                          y: {
+                            formatter: (val) => `${val} deals`
+                          }
+                        }
+                      }}
+                      series={[{
+                        name: 'Deals',
+                        data: getMonthlyDealsData().map(d => d.deals)
+                      }]}
+                      type="bar"
+                      height={300}
+                    />
+                  </motion.div>
+                )}
+
+                {/* Performance Metrics */}
+                {dashboardWidgets.performance && (
+                  <motion.div
+                    layout
+                    className="card-gradient rounded-2xl p-6 shadow-card"
+                  >
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="text-lg font-semibold text-surface-900 dark:text-surface-100">
+                        Team Performance
+                      </h3>
+                      <button
+                        onClick={() => toggleWidget('performance')}
+                        className="p-2 text-surface-400 hover:text-surface-600 hover:bg-surface-100 dark:hover:bg-surface-700 rounded-lg transition-all"
+                      >
+                        <ApperIcon name="EyeOff" className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between p-4 bg-surface-50 dark:bg-surface-700 rounded-xl">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
+                            <ApperIcon name="User" className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-surface-900 dark:text-surface-100">Sarah Johnson</h4>
+                            <p className="text-sm text-surface-600 dark:text-surface-400">Senior Sales Rep</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-semibold text-surface-900 dark:text-surface-100">$125k</div>
+                          <div className="text-sm text-green-600">+18.5%</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between p-4 bg-surface-50 dark:bg-surface-700 rounded-xl">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
+                            <ApperIcon name="User" className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-surface-900 dark:text-surface-100">Mike Wilson</h4>
+                            <p className="text-sm text-surface-600 dark:text-surface-400">Sales Rep</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-semibold text-surface-900 dark:text-surface-100">$98k</div>
+                          <div className="text-sm text-blue-600">+12.3%</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between p-4 bg-surface-50 dark:bg-surface-700 rounded-xl">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-full flex items-center justify-center">
+                            <ApperIcon name="User" className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-surface-900 dark:text-surface-100">Emily Chen</h4>
+                            <p className="text-sm text-surface-600 dark:text-surface-400">Junior Sales Rep</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-semibold text-surface-900 dark:text-surface-100">$76k</div>
+                          <div className="text-sm text-purple-600">+8.7%</div>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+
+              {/* Widget Controls */}
+              <div className="mt-8 card-gradient rounded-2xl p-6 shadow-card">
+                <h3 className="text-lg font-semibold text-surface-900 dark:text-surface-100 mb-4">
+                  Widget Controls
+                </h3>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <button
+                    onClick={() => toggleWidget('revenue')}
+                    className={`p-3 rounded-xl border-2 transition-all duration-200 ${
+                      dashboardWidgets.revenue
+                        ? 'border-primary bg-primary bg-opacity-10 text-primary'
+                        : 'border-surface-300 dark:border-surface-600 text-surface-600 dark:text-surface-400'
+                    }`}
+                  >
+                    <ApperIcon name="TrendingUp" className="w-5 h-5 mx-auto mb-2" />
+                    <div className="text-sm font-medium">Revenue</div>
+                  </button>
+                  <button
+                    onClick={() => toggleWidget('deals')}
+                    className={`p-3 rounded-xl border-2 transition-all duration-200 ${
+                      dashboardWidgets.deals
+                        ? 'border-primary bg-primary bg-opacity-10 text-primary'
+                        : 'border-surface-300 dark:border-surface-600 text-surface-600 dark:text-surface-400'
+                    }`}
+                  >
+                    <ApperIcon name="PieChart" className="w-5 h-5 mx-auto mb-2" />
+                    <div className="text-sm font-medium">Deals</div>
+                  </button>
+                  <button
+                    onClick={() => toggleWidget('conversion')}
+                    className={`p-3 rounded-xl border-2 transition-all duration-200 ${
+                      dashboardWidgets.conversion
+                        ? 'border-primary bg-primary bg-opacity-10 text-primary'
+                        : 'border-surface-300 dark:border-surface-600 text-surface-600 dark:text-surface-400'
+                    }`}
+                  >
+                    <ApperIcon name="BarChart3" className="w-5 h-5 mx-auto mb-2" />
+                    <div className="text-sm font-medium">Monthly</div>
+                  </button>
+                  <button
+                    onClick={() => toggleWidget('performance')}
+                    className={`p-3 rounded-xl border-2 transition-all duration-200 ${
+                      dashboardWidgets.performance
+                        ? 'border-primary bg-primary bg-opacity-10 text-primary'
+                        : 'border-surface-300 dark:border-surface-600 text-surface-600 dark:text-surface-400'
+                    }`}
+                  >
+                    <ApperIcon name="Users" className="w-5 h-5 mx-auto mb-2" />
+                    <div className="text-sm font-medium">Team</div>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           )}
         </AnimatePresence>
       </main>
