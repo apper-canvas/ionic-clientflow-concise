@@ -1319,4 +1319,3 @@ function MainFeature() {
 
 export default MainFeature
 
-} 
