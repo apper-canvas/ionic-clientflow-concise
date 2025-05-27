@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { toast } from 'react-toastify'
 import Chart from 'react-apexcharts'
 import ApperIcon from '../ApperIcon'
-import { INITIAL_CUSTOMERS, INITIAL_DEALS, INITIAL_APPOINTMENTS } from '../../data/initialData'
+import { INITIAL_CUSTOMERS, INITIAL_DEALS, INITIAL_APPOINTMENTS, DEFAULT_SCORING_CRITERIA } from '../../data/initialData'
 
 import { format, subMonths, isAfter, isBefore } from 'date-fns'
 import { formatCurrency } from '../../utils/formatters'
@@ -342,6 +342,587 @@ const Dashboard = ({ deals, customers }) => {
       </div>
     </motion.div>
   )
+
+// Lead Scoring Component
+const LeadScoring = ({ customers, onUpdateCustomer }) => {
+  const [scoringCriteria, setScoringCriteria] = useState(DEFAULT_SCORING_CRITERIA)
+  const [selectedCustomer, setSelectedCustomer] = useState(null)
+  const [showConfigModal, setShowConfigModal] = useState(false)
+  const [editingCriterion, setEditingCriterion] = useState(null)
+  const [criterionForm, setCriterionForm] = useState({
+    name: '',
+    description: '',
+    weight: 20,
+    type: 'categorical',
+    categories: [],
+    ranges: []
+  })
+
+  // Calculate lead score for a customer
+  const calculateLeadScore = (customer, criteria = scoringCriteria) => {
+    let totalScore = 0
+    let totalWeight = 0
+
+    criteria.forEach(criterion => {
+      let criterionScore = 0
+      totalWeight += criterion.weight
+
+      if (criterion.type === 'categorical') {
+        const category = criterion.categories.find(cat => {
+          if (criterion.name === 'Lead Source Quality') {
+            return cat.value === customer.leadSource
+          }
+          if (criterion.name === 'Engagement Level') {
+            return cat.value === customer.engagementLevel
+          }
+          return false
+        })
+        criterionScore = category ? category.score : 0
+      } else if (criterion.type === 'range') {
+        let value = 0
+        if (criterion.name === 'Company Size') {
+          value = customer.companySize || 0
+        } else if (criterion.name === 'Deal Value') {
+          // Find associated deal value
+          value = 25000 // Default for demo
+        } else if (criterion.name === 'Response Time') {
+          value = customer.responseTime || 0
+        }
+
+        const range = criterion.ranges.find(range => value >= range.min && value <= range.max)
+        criterionScore = range ? range.score : 0
+      }
+
+      totalScore += (criterionScore * criterion.weight / 100)
+    })
+
+    return Math.round(totalScore)
+  }
+
+  // Get score category
+  const getScoreCategory = (score) => {
+    if (score >= 70) return 'high'
+    if (score >= 40) return 'medium'
+    return 'low'
+  }
+
+  // Get score color
+  const getScoreColor = (score) => {
+    if (score >= 70) return 'text-green-600'
+    if (score >= 40) return 'text-yellow-600'
+    return 'text-red-600'
+  }
+
+  // Handle criterion form submission
+  const handleCriterionSubmit = (e) => {
+    e.preventDefault()
+    
+    if (!criterionForm.name || !criterionForm.description) {
+      toast.error('Please fill in all required fields')
+      return
+    }
+
+    if (editingCriterion) {
+      setScoringCriteria(criteria => criteria.map(criterion => 
+        criterion.id === editingCriterion.id 
+          ? { ...criterion, ...criterionForm }
+          : criterion
+      ))
+      toast.success('Scoring criterion updated successfully')
+    } else {
+      const newCriterion = {
+        id: Date.now().toString(),
+        ...criterionForm
+      }
+      setScoringCriteria([...scoringCriteria, newCriterion])
+      toast.success('Scoring criterion added successfully')
+    }
+
+    setShowConfigModal(false)
+    setEditingCriterion(null)
+    resetCriterionForm()
+  }
+
+  const resetCriterionForm = () => {
+    setCriterionForm({
+      name: '',
+      description: '',
+      weight: 20,
+      type: 'categorical',
+      categories: [],
+      ranges: []
+    })
+  }
+
+  const handleEditCriterion = (criterion) => {
+    setEditingCriterion(criterion)
+    setCriterionForm({
+      name: criterion.name,
+      description: criterion.description,
+      weight: criterion.weight,
+      type: criterion.type,
+      categories: criterion.categories || [],
+      ranges: criterion.ranges || []
+    })
+    setShowConfigModal(true)
+  }
+
+  const handleDeleteCriterion = (criterionId) => {
+    setScoringCriteria(criteria => criteria.filter(c => c.id !== criterionId))
+    toast.success('Scoring criterion deleted successfully')
+  }
+
+  const handleWeightChange = (criterionId, weight) => {
+    setScoringCriteria(criteria => criteria.map(criterion => 
+      criterion.id === criterionId 
+        ? { ...criterion, weight: parseInt(weight) }
+        : criterion
+    ))
+  }
+
+  const recalculateAllScores = () => {
+    // Recalculate scores for all customers
+    customers.forEach(customer => {
+      const newScore = calculateLeadScore(customer)
+      if (newScore !== customer.leadScore) {
+        const updatedCustomer = {
+          ...customer,
+          leadScore: newScore,
+          scoringHistory: [
+            ...customer.scoringHistory,
+            { 
+              date: new Date(), 
+              score: newScore, 
+              reason: 'Scoring criteria updated' 
+            }
+          ]
+        }
+        onUpdateCustomer(updatedCustomer)
+      }
+    })
+    toast.success('All lead scores recalculated successfully')
+  }
+
+  const scoredCustomers = customers.map(customer => ({
+    ...customer,
+    calculatedScore: calculateLeadScore(customer)
+  })).sort((a, b) => b.calculatedScore - a.calculatedScore)
+
+  const averageScore = scoredCustomers.reduce((sum, customer) => sum + customer.calculatedScore, 0) / scoredCustomers.length
+  const highScoreCount = scoredCustomers.filter(c => c.calculatedScore >= 70).length
+  const mediumScoreCount = scoredCustomers.filter(c => c.calculatedScore >= 40 && c.calculatedScore < 70).length
+  const lowScoreCount = scoredCustomers.filter(c => c.calculatedScore < 40).length
+
+  return (
+    <motion.div
+      key="leadscoring"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.3 }}
+    >
+      {/* Lead Scoring Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold text-surface-900 dark:text-surface-100">
+            Lead Scoring System
+          </h2>
+          <p className="text-surface-600 dark:text-surface-400 mt-1">
+            Configure scoring criteria and analyze lead quality
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <button
+            onClick={() => {
+              setEditingCriterion(null)
+              resetCriterionForm()
+              setShowConfigModal(true)
+            }}
+            className="btn-secondary flex items-center gap-2"
+          >
+            <ApperIcon name="Settings" className="w-4 h-4" />
+            Configure Scoring
+          </button>
+          <button
+            onClick={recalculateAllScores}
+            className="btn-primary flex items-center gap-2"
+          >
+            <ApperIcon name="RefreshCw" className="w-4 h-4" />
+            Recalculate Scores
+          </button>
+        </div>
+      </div>
+
+      {/* Scoring Overview */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <DashboardWidget title="Average Score" icon="Target">
+          <div className={`text-2xl font-bold ${getScoreColor(averageScore)}`}>
+            {averageScore.toFixed(1)}
+          </div>
+          <div className="text-sm text-surface-600 dark:text-surface-400 mt-1">
+            Overall average
+          </div>
+        </DashboardWidget>
+
+        <DashboardWidget title="High Quality" icon="TrendingUp">
+          <div className="text-2xl font-bold text-green-600">
+            {highScoreCount}
+          </div>
+          <div className="text-sm text-surface-600 dark:text-surface-400 mt-1">
+            Score 70+
+          </div>
+        </DashboardWidget>
+
+        <DashboardWidget title="Medium Quality" icon="Minus">
+          <div className="text-2xl font-bold text-yellow-600">
+            {mediumScoreCount}
+          </div>
+          <div className="text-sm text-surface-600 dark:text-surface-400 mt-1">
+            Score 40-69
+          </div>
+        </DashboardWidget>
+
+        <DashboardWidget title="Low Quality" icon="TrendingDown">
+          <div className="text-2xl font-bold text-red-600">
+            {lowScoreCount}
+          </div>
+          <div className="text-sm text-surface-600 dark:text-surface-400 mt-1">
+            Score under 40
+          </div>
+        </DashboardWidget>
+      </div>
+
+      {/* Scoring Criteria */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <DashboardWidget title="Scoring Criteria" icon="List">
+          <div className="space-y-4">
+            {scoringCriteria.map((criterion) => (
+              <div key={criterion.id} className="criteria-card">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-medium text-surface-900 dark:text-surface-100">
+                    {criterion.name}
+                  </h4>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleEditCriterion(criterion)}
+                      className="p-1 text-surface-400 hover:text-primary transition-colors"
+                    >
+                      <ApperIcon name="Edit2" className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteCriterion(criterion.id)}
+                      className="p-1 text-surface-400 hover:text-red-500 transition-colors"
+                    >
+                      <ApperIcon name="Trash2" className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                <p className="text-sm text-surface-600 dark:text-surface-400 mb-3">
+                  {criterion.description}
+                </p>
+                <div className="flex items-center gap-3">
+                  <label className="text-sm font-medium text-surface-700 dark:text-surface-300">
+                    Weight: {criterion.weight}%
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={criterion.weight}
+                    onChange={(e) => handleWeightChange(criterion.id, e.target.value)}
+                    className="weight-slider flex-1"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </DashboardWidget>
+
+        <DashboardWidget title="Customer Scores" icon="Users">
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {scoredCustomers.map((customer) => (
+              <div
+                key={customer.id}
+                className="flex items-center justify-between p-3 bg-surface-50 dark:bg-surface-700 rounded-lg cursor-pointer hover:bg-surface-100 dark:hover:bg-surface-600 transition-colors"
+                onClick={() => setSelectedCustomer(customer)}
+              >
+                <div className="flex-1">
+                  <div className="font-medium text-surface-900 dark:text-surface-100">
+                    {customer.name}
+                  </div>
+                  <div className="text-sm text-surface-600 dark:text-surface-400">
+                    {customer.company}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <div className={`font-bold ${getScoreColor(customer.calculatedScore)}`}>
+                      {customer.calculatedScore}
+                    </div>
+                    <div className={`text-xs px-2 py-1 rounded-full score-badge ${getScoreCategory(customer.calculatedScore)}`}>
+                      {getScoreCategory(customer.calculatedScore).toUpperCase()}
+                    </div>
+                  </div>
+                  <div className="w-16">
+                    <div className="score-progress">
+                      <div 
+                        className={`score-progress-bar ${getScoreCategory(customer.calculatedScore)}`}
+                        style={{ width: `${customer.calculatedScore}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </DashboardWidget>
+      </div>
+
+      {/* Scoring Configuration Modal */}
+      <AnimatePresence>
+        {showConfigModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-surface-800 rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-surface-900 dark:text-surface-100">
+                  {editingCriterion ? 'Edit' : 'Add'} Scoring Criterion
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowConfigModal(false)
+                    setEditingCriterion(null)
+                    resetCriterionForm()
+                  }}
+                  className="p-2 hover:bg-surface-100 dark:hover:bg-surface-700 rounded-lg transition-colors"
+                >
+                  <ApperIcon name="X" className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleCriterionSubmit} className="scoring-form">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+                      Criterion Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={criterionForm.name}
+                      onChange={(e) => setCriterionForm({ ...criterionForm, name: e.target.value })}
+                      className="input-modern w-full"
+                      placeholder="e.g., Industry Type"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+                      Weight (%)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={criterionForm.weight}
+                      onChange={(e) => setCriterionForm({ ...criterionForm, weight: parseInt(e.target.value) })}
+                      className="input-modern w-full"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+                    Description
+                  </label>
+                  <textarea
+                    value={criterionForm.description}
+                    onChange={(e) => setCriterionForm({ ...criterionForm, description: e.target.value })}
+                    className="input-modern w-full h-20 resize-none"
+                    placeholder="Describe how this criterion affects lead scoring..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+                    Scoring Type
+                  </label>
+                  <select
+                    value={criterionForm.type}
+                    onChange={(e) => setCriterionForm({ ...criterionForm, type: e.target.value })}
+                    className="input-modern w-full"
+                  >
+                    <option value="categorical">Categorical (Fixed Values)</option>
+                    <option value="range">Range-based (Numeric Ranges)</option>
+                  </select>
+                </div>
+
+                <div className="flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowConfigModal(false)
+                      setEditingCriterion(null)
+                      resetCriterionForm()
+                    }}
+                    className="px-4 py-2 text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn-primary"
+                  >
+                    {editingCriterion ? 'Update' : 'Add'} Criterion
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Customer Detail Modal */}
+      <AnimatePresence>
+        {selectedCustomer && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-surface-800 rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-surface-900 dark:text-surface-100">
+                  {selectedCustomer.name} - Lead Score Details
+                </h3>
+                <button
+                  onClick={() => setSelectedCustomer(null)}
+                  className="p-2 hover:bg-surface-100 dark:hover:bg-surface-700 rounded-lg transition-colors"
+                >
+                  <ApperIcon name="X" className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="score-comparison">
+                  <div className="score-metric">
+                    <div className={`text-3xl font-bold ${getScoreColor(selectedCustomer.calculatedScore)}`}>
+                      {selectedCustomer.calculatedScore}
+                    </div>
+                    <div className="text-sm text-surface-600 dark:text-surface-400">Current Score</div>
+                  </div>
+                  <div className="score-metric">
+                    <div className="text-2xl font-bold text-surface-900 dark:text-surface-100">
+                      {selectedCustomer.leadScore || 'N/A'}
+                    </div>
+                    <div className="text-sm text-surface-600 dark:text-surface-400">Previous Score</div>
+                  </div>
+                  <div className="score-metric">
+                    <div className={`text-xl font-bold ${
+                      selectedCustomer.calculatedScore > (selectedCustomer.leadScore || 0) ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {selectedCustomer.calculatedScore > (selectedCustomer.leadScore || 0) ? '+' : ''}
+                      {selectedCustomer.calculatedScore - (selectedCustomer.leadScore || 0)}
+                    </div>
+                    <div className="text-sm text-surface-600 dark:text-surface-400">Change</div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="font-medium text-surface-900 dark:text-surface-100 mb-3">Scoring Breakdown</h4>
+                  <div className="space-y-3">
+                    {scoringCriteria.map((criterion) => {
+                      let value = 0
+                      let score = 0
+                      let display = 'N/A'
+
+                      if (criterion.type === 'categorical') {
+                        if (criterion.name === 'Lead Source Quality') {
+                          const category = criterion.categories.find(cat => cat.value === selectedCustomer.leadSource)
+                          if (category) {
+                            score = category.score
+                            display = category.label
+                          }
+                        } else if (criterion.name === 'Engagement Level') {
+                          const category = criterion.categories.find(cat => cat.value === selectedCustomer.engagementLevel)
+                          if (category) {
+                            score = category.score
+                            display = category.label
+                          }
+                        }
+                      } else if (criterion.type === 'range') {
+                        if (criterion.name === 'Company Size') {
+                          value = selectedCustomer.companySize || 0
+                          display = `${value} employees`
+                        } else if (criterion.name === 'Response Time') {
+                          value = selectedCustomer.responseTime || 0
+                          display = `${value} hours`
+                        }
+                        const range = criterion.ranges.find(range => value >= range.min && value <= range.max)
+                        score = range ? range.score : 0
+                      }
+
+                      const weightedScore = (score * criterion.weight / 100)
+
+                      return (
+                        <div key={criterion.id} className="flex items-center justify-between p-3 bg-surface-50 dark:bg-surface-700 rounded-lg">
+                          <div>
+                            <div className="font-medium text-surface-900 dark:text-surface-100">
+                              {criterion.name}
+                            </div>
+                            <div className="text-sm text-surface-600 dark:text-surface-400">
+                              {display}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-surface-900 dark:text-surface-100">
+                              {weightedScore.toFixed(1)} pts
+                            </div>
+                            <div className="text-sm text-surface-600 dark:text-surface-400">
+                              {score}/100 × {criterion.weight}%
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {selectedCustomer.scoringHistory && selectedCustomer.scoringHistory.length > 0 && (
+                  <div>
+                    <h4 className="font-medium text-surface-900 dark:text-surface-100 mb-3">Scoring History</h4>
+                    <div className="scoring-history">
+                      {selectedCustomer.scoringHistory.map((entry, index) => (
+                        <div key={index} className="history-item">
+                          <div>
+                            <div className="font-medium text-surface-900 dark:text-surface-100">
+                              Score: {entry.score}
+                            </div>
+                            <div className="text-sm text-surface-600 dark:text-surface-400">
+                              {entry.reason}
+                            </div>
+                          </div>
+                          <div className="text-sm text-surface-600 dark:text-surface-400">
+                            {format(entry.date, 'MMM dd, yyyy')}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  )
+}
+
+
 }
 
 
@@ -624,6 +1205,21 @@ export default function MainFeature() {
                     <span className="hidden sm:inline">Dashboard</span>
                   </span>
                 </button>
+                <button
+                  onClick={() => setActiveTab('leadscoring')}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                    activeTab === 'leadscoring'
+                      ? 'bg-white dark:bg-surface-800 shadow-md text-primary'
+                      : 'text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-200'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <ApperIcon name="Target" className="w-4 h-4" />
+                    <span className="hidden sm:inline">Lead Scoring</span>
+                  </span>
+                </button>
+
+
 
               </div>
             </div>
@@ -672,6 +1268,18 @@ export default function MainFeature() {
               customers={customers}
             />
           )}
+
+          {activeTab === 'leadscoring' && (
+            <LeadScoring
+              customers={customers}
+              onUpdateCustomer={(updatedCustomer) => {
+                setCustomers(customers.map(customer => 
+                  customer.id === updatedCustomer.id ? updatedCustomer : customer
+                ))
+              }}
+            />
+          )}
+
 
         </AnimatePresence>
       </main>
