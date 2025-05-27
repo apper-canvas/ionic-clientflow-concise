@@ -923,7 +923,8 @@ const LeadScoring = ({ customers, onUpdateCustomer }) => {
 }
 
 
-export default function MainFeature() {
+function MainFeature() {
+
   const [customers, setCustomers] = useState(INITIAL_CUSTOMERS)
   const [appointments, setAppointments] = useState(INITIAL_APPOINTMENTS)
 
@@ -1315,4 +1316,7 @@ export default function MainFeature() {
       />
     </div>
   )
+
+export default MainFeature
+
 } 
