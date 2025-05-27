@@ -3,7 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { toast } from 'react-toastify'
 import Chart from 'react-apexcharts'
 import ApperIcon from '../ApperIcon'
-import { INITIAL_CUSTOMERS, INITIAL_DEALS } from '../../data/initialData'
+import { INITIAL_CUSTOMERS, INITIAL_DEALS, INITIAL_APPOINTMENTS } from '../../data/initialData'
+
 import { format, subMonths, isAfter, isBefore } from 'date-fns'
 import { formatCurrency } from '../../utils/formatters'
 import CustomerList from './CustomerList'
@@ -346,6 +347,8 @@ const Dashboard = ({ deals, customers }) => {
 
 export default function MainFeature() {
   const [customers, setCustomers] = useState(INITIAL_CUSTOMERS)
+  const [appointments, setAppointments] = useState(INITIAL_APPOINTMENTS)
+
   const [deals, setDeals] = useState(INITIAL_DEALS)
   const [activeTab, setActiveTab] = useState('customers')
   const [showCustomerModal, setShowCustomerModal] = useState(false)
@@ -537,6 +540,33 @@ export default function MainFeature() {
     setDraggedDeal(null)
   }
 
+  const handleAddAppointment = (appointmentData) => {
+    const newAppointment = {
+      id: Date.now().toString(),
+      ...appointmentData,
+      assignedTo: customerForm.assignedTo || 'Sarah Johnson',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }
+    setAppointments([...appointments, newAppointment])
+    toast.success('Appointment scheduled successfully')
+  }
+
+  const handleEditAppointment = (updatedAppointment) => {
+    setAppointments(appointments.map(appointment => 
+      appointment.id === updatedAppointment.id 
+        ? { ...updatedAppointment, updatedAt: new Date() }
+        : appointment
+    ))
+    toast.success('Appointment updated successfully')
+  }
+
+  const handleDeleteAppointment = (appointmentId) => {
+    setAppointments(appointments.filter(appointment => appointment.id !== appointmentId))
+    toast.success('Appointment deleted successfully')
+  }
+
+
   return (
     <div className="min-h-screen">
       {/* Header */}
@@ -658,7 +688,12 @@ export default function MainFeature() {
         setCustomerForm={setCustomerForm}
         onSubmit={handleCustomerSubmit}
         isEditing={!!editingCustomer}
+        appointments={appointments}
+        onAddAppointment={handleAddAppointment}
+        onEditAppointment={handleEditAppointment}
+        onDeleteAppointment={handleDeleteAppointment}
       />
+
 
       <DealModal
         show={showDealModal}
