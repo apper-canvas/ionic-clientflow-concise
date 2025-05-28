@@ -1,4 +1,4 @@
-import MainFeature from '../components/MainFeature/index'
+import MainFeature from '../components/MainFeature'
 
 export default function Home() {
   return (
